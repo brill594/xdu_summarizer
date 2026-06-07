@@ -1,11 +1,12 @@
 """
 ASR 语音识别引擎
-封装 OpenAI Whisper（本地）和 Whisper API 两种模式
+支持 FunASR、本地 Whisper 和 Whisper API。
 """
 import json
 import logging
 import os
 import time
+import wave
 from pathlib import Path
 from typing import Optional
 
@@ -16,38 +17,86 @@ class ASREngine:
     """
     语音识别引擎
 
-    mode="local": 使用本地 openai-whisper 模型
-    mode="api":   使用 OpenAI Whisper API
+    mode="funasr":      使用 FunASR AutoModel，本项目默认中文课堂识别后端
+    mode="whisper":     使用本地 openai-whisper 模型
+    mode="whisper-api": 使用 OpenAI Whisper API
+
+    兼容旧配置：mode="local" 等同 "whisper"，mode="api" 等同 "whisper-api"。
     """
 
     def __init__(
         self,
-        mode: str = "local",
-        model_name: str = "base",
-        device: str = "cpu",
-        language: Optional[str] = "zh",
+        mode: str = "funasr",
+        model_name: str = "FunAudioLLM/Fun-ASR-Nano-2512",
+        device: str = "auto",
+        language: Optional[str] = "auto",
         api_key: Optional[str] = None,
         api_base: Optional[str] = None,
+        vad_model: Optional[str] = "fsmn-vad",
+        batch_size_s: int = 60,
+        merge_length_s: int = 15,
     ):
-        self.mode = mode
+        self.mode = self._normalize_mode(mode)
         self.model_name = model_name
-        self.device = device
+        self.device = self._resolve_device(device)
         self.language = language
+        self.vad_model = vad_model
+        self.batch_size_s = batch_size_s
+        self.merge_length_s = merge_length_s
         self._model = None
 
-        if mode == "api":
+        if self.mode == "whisper-api":
             from openai import OpenAI
             self._client = OpenAI(
                 api_key=api_key or os.getenv("OPENAI_API_KEY"),
                 base_url=api_base,
             )
-        elif mode == "local":
+        elif self.mode in {"funasr", "whisper"}:
             self._load_model()
+        else:
+            raise ValueError(f"Unsupported ASR mode: {mode}")
+
+    @staticmethod
+    def _normalize_mode(mode: str) -> str:
+        normalized = (mode or "funasr").strip().lower().replace("_", "-")
+        if normalized == "local":
+            return "whisper"
+        if normalized == "api":
+            return "whisper-api"
+        return normalized
+
+    @staticmethod
+    def _resolve_device(device: str) -> str:
+        if device != "auto":
+            return device
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return "cuda:0"
+        except Exception:
+            pass
+        return "cpu"
 
     def _load_model(self):
-        """加载本地 Whisper 模型（懒加载）"""
+        """加载本地 ASR 模型。"""
         if self._model is not None:
             return
+
+        if self.mode == "funasr":
+            logger.info(f"加载 FunASR 模型: {self.model_name} (device={self.device})")
+            from funasr import AutoModel
+
+            kwargs = {
+                "model": self.model_name,
+                "device": self.device,
+            }
+            if self.vad_model:
+                kwargs["vad_model"] = self.vad_model
+                kwargs["vad_kwargs"] = {"max_single_segment_time": 30000}
+            self._model = AutoModel(**kwargs)
+            logger.info("FunASR 模型加载完毕")
+            return
+
         logger.info(f"加载 Whisper 模型: {self.model_name} (device={self.device})")
         import whisper
         self._model = whisper.load_model(self.model_name, device=self.device)
@@ -59,7 +108,7 @@ class ASREngine:
 
         Args:
             audio_path: 音频文件路径
-            cache_path: 缓存路径，存在时直接读取
+            cache_path: 缓存路径，存在且 ASR 引擎匹配时直接读取
 
         Returns:
             {
@@ -68,23 +117,35 @@ class ASREngine:
                     {"start": 0.0, "end": 2.5, "text": "..."},
                     ...
                 ],
-                "language": "zh"
+                "language": "zh",
+                "engine": "funasr"
             }
         """
-        # 缓存命中
         if cache_path and Path(cache_path).exists():
-            logger.info(f"从缓存读取 ASR 结果: {cache_path}")
             with open(cache_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                cached = json.load(f)
+            cached_engine = cached.get("engine")
+            cached_model = cached.get("model")
+            engine_matches = cached_engine == self.mode or (self.mode == "whisper" and not cached_engine)
+            model_matches = not cached_model or cached_model == self.model_name or self.mode == "whisper-api"
+            if engine_matches and model_matches:
+                logger.info(f"从缓存读取 ASR 结果: {cache_path}")
+                return cached
+            logger.info(
+                f"忽略不同 ASR 配置的缓存: {cache_path} "
+                f"(cache={cached_engine or 'legacy'}/{cached_model or 'unknown'}, "
+                f"current={self.mode}/{self.model_name})"
+            )
 
         logger.info(f"开始语音识别: {audio_path}")
 
-        if self.mode == "api":
+        if self.mode == "whisper-api":
             result = self._transcribe_api(audio_path)
+        elif self.mode == "funasr":
+            result = self._transcribe_funasr(audio_path)
         else:
-            result = self._transcribe_local(audio_path)
+            result = self._transcribe_whisper(audio_path)
 
-        # 写入缓存
         if cache_path:
             Path(cache_path).parent.mkdir(parents=True, exist_ok=True)
             with open(cache_path, "w", encoding="utf-8") as f:
@@ -93,14 +154,46 @@ class ASREngine:
 
         return result
 
-    def _transcribe_local(self, audio_path: str) -> dict:
-        """本地 Whisper 转录"""
+    def _transcribe_funasr(self, audio_path: str) -> dict:
+        """FunASR 转录。"""
+        self._load_model()
+        start = time.time()
+
+        raw = self._model.generate(
+            input=str(audio_path),
+            cache={},
+            language=self.language or "auto",
+            use_itn=True,
+            batch_size_s=self.batch_size_s,
+            merge_vad=bool(self.vad_model),
+            merge_length_s=self.merge_length_s,
+        )
+
+        elapsed = time.time() - start
+        duration = self._audio_duration_seconds(audio_path)
+        result = self._normalize_funasr_result(raw, duration)
+        result.update({
+            "engine": "funasr",
+            "model": self.model_name,
+            "device": self.device,
+            "language": self.language or "auto",
+            "raw": raw,
+        })
+        logger.info(
+            f"FunASR 完成: 音频时长={duration:.1f}s, "
+            f"处理耗时={elapsed:.1f}s, "
+            f"实时率={elapsed/max(duration,1):.2f}x"
+        )
+        return result
+
+    def _transcribe_whisper(self, audio_path: str) -> dict:
+        """本地 Whisper 转录。"""
         self._load_model()
         start = time.time()
 
         result = self._model.transcribe(
             audio_path,
-            language=self.language,
+            language=None if self.language == "auto" else self.language,
             verbose=False,
             word_timestamps=False,
         )
@@ -108,7 +201,7 @@ class ASREngine:
         elapsed = time.time() - start
         duration = result.get("segments", [{}])[-1].get("end", 0) if result.get("segments") else 0
         logger.info(
-            f"本地 ASR 完成: 音频时长={duration:.1f}s, "
+            f"本地 Whisper ASR 完成: 音频时长={duration:.1f}s, "
             f"处理耗时={elapsed:.1f}s, "
             f"实时率={elapsed/max(duration,1):.2f}x"
         )
@@ -124,15 +217,18 @@ class ASREngine:
                 for seg in result.get("segments", [])
             ],
             "language": result.get("language", "unknown"),
+            "engine": "whisper",
+            "model": self.model_name,
+            "device": self.device,
         }
 
     def _transcribe_api(self, audio_path: str) -> dict:
-        """OpenAI Whisper API 转录"""
+        """OpenAI Whisper API 转录。"""
         with open(audio_path, "rb") as f:
             transcript = self._client.audio.transcriptions.create(
                 model="whisper-1",
                 file=f,
-                language=self.language,
+                language=None if self.language == "auto" else self.language,
                 response_format="verbose_json",
                 timestamp_granularities=["segment"],
             )
@@ -149,6 +245,62 @@ class ASREngine:
             "text": transcript.text,
             "segments": segments,
             "language": transcript.language if hasattr(transcript, "language") else "unknown",
+            "engine": "whisper-api",
+            "model": "whisper-1",
+        }
+
+    @staticmethod
+    def _audio_duration_seconds(audio_path: str) -> float:
+        try:
+            with wave.open(audio_path, "rb") as wav:
+                rate = wav.getframerate()
+                return wav.getnframes() / rate if rate else 0.0
+        except Exception:
+            try:
+                import torchaudio
+                info = torchaudio.info(audio_path)
+                return info.num_frames / info.sample_rate if info.sample_rate else 0.0
+            except Exception:
+                return 0.0
+
+    @staticmethod
+    def _clean_funasr_text(text: str) -> str:
+        try:
+            from funasr.utils.postprocess_utils import rich_transcription_postprocess
+            return rich_transcription_postprocess(text or "").strip()
+        except Exception:
+            return (text or "").strip()
+
+    def _normalize_funasr_result(self, raw, duration: float) -> dict:
+        item = raw[0] if isinstance(raw, list) and raw else raw
+        if not isinstance(item, dict):
+            text = self._clean_funasr_text(str(item))
+            return {
+                "text": text,
+                "segments": [{"start": 0.0, "end": duration, "text": text}] if text else [],
+            }
+
+        segments = []
+        for sent in item.get("sentence_info") or []:
+            text = self._clean_funasr_text(sent.get("text", ""))
+            if not text:
+                continue
+            segment = {
+                "start": round((sent.get("start", 0) or 0) / 1000.0, 3),
+                "end": round((sent.get("end", 0) or 0) / 1000.0, 3),
+                "text": text,
+            }
+            if "spk" in sent:
+                segment["speaker"] = sent["spk"]
+            segments.append(segment)
+
+        text = self._clean_funasr_text(item.get("text", ""))
+        if not segments and text:
+            segments.append({"start": 0.0, "end": duration, "text": text})
+
+        return {
+            "text": text or "".join(seg["text"] for seg in segments),
+            "segments": segments,
         }
 
     def transcribe_video_directly(
@@ -169,11 +321,9 @@ class ASREngine:
         audio_path = get_audio_cache_path(video_path, cache_dir)
         asr_cache = audio_path.replace(".wav", "_asr.json")
 
-        # 如果 ASR 缓存已存在，跳过音频提取
         if Path(asr_cache).exists():
             return self.transcribe(audio_path, cache_path=asr_cache)
 
-        # 提取音频
         if not Path(audio_path).exists():
             extract_audio(video_path, audio_path)
 

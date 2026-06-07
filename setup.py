@@ -18,6 +18,11 @@ setup(
         "pycryptodome>=3.23.0",
         "psutil>=7.0.0",
         "flask>=3.0.0",
+        "funasr>=1.3.9",
+        "modelscope>=1.37.1",
+        "transformers>=4.51.3,<5.0.0",
+        "soundfile>=0.13.1",
+        "librosa>=0.11.0",
     ],
     entry_points={
         "console_scripts": [

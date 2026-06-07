@@ -20,7 +20,7 @@
 | **① 视频下载** | `XDUClassVideoDownloader`（运行时自动拉取） | liveId / UID + cookies 或下载器认证向导 | .mp4 视频文件 (pptVideo + teacherTrack) |
 | **② 预处理** | `AudioExtractor` | .mp4 视频 | .wav 音频 (16kHz mono) |
 |  | `KeyFrameExtractor` | .mp4 (pptVideo) | 关键帧截图 (slide transitions) |
-| **③ AI 分析** | `ASREngine` (Whisper) | .wav 音频 | 带时间戳的逐字稿 (SRT/JSON) |
+| **③ AI 分析** | `ASREngine` (FunASR / Whisper) | .wav 音频 | 带时间戳的逐字稿 (JSON) |
 |  | `SummaryEngine` (LLM) | 逐字稿 | 结构化重点摘要 |
 | **④ 输出** | `MarkdownGenerator` | 摘要 + 截图 | **图文并茂的 .md 笔记** |
 
@@ -58,8 +58,8 @@
                    ┌─────────┴──────────┐
                    ▼                    ▼
             ┌──────────────┐   ┌────────────────┐
-            │  Whisper ASR  │   │  关键帧截图      │
-            │ (local/API)   │   │ (slide_01.png)  │
+            │ FunASR /     │   │  关键帧截图      │
+            │ Whisper ASR  │   │ (slide_01.jpg)   │
             └──────┬───────┘   └───────┬────────┘
                    │                   │
                    ▼                   │
@@ -89,11 +89,11 @@
 
 | 方案 | 优点 | 缺点 | 适用场景 |
 |---|---|---|---|
-| **Whisper (local)** `openai-whisper` | 免费、离线、中文好 | 慢、需要 GPU | 少量课程 |
-| **Whisper API** | 速度快、质量高 | 按量付费 | 大量课程 |
-| **FunASR** (阿里) | 中文极好、流式 | 部署复杂 | 对中文精度要求极高 |
+| **FunASR** `FunAudioLLM/Fun-ASR-Nano-2512` | 中文课堂、方言/口音覆盖更好，支持本地 GPU | 首次下载模型较大 | 默认方案 |
+| **Whisper (local)** `openai-whisper` | 免费、离线、依赖少 | 中文课堂/方言效果较弱 | fallback |
+| **Whisper API** | 接入简单 | 按量付费、外部服务 | 临时 fallback |
 
-**推荐：Whisper local base/small 模型** — 平衡速度和质量。
+**推荐：FunASR-Nano + GPU/CPU auto** — 当前默认后端，优先保证中文课堂逐字稿质量。
 
 ### 3.2 LLM 摘要
 
@@ -130,7 +130,7 @@ xdu_summarizer/
 │   ├── __init__.py
 │   ├── config.py                # 配置管理
 │   ├── audio_extractor.py       # 音频提取 (ffmpeg)
-│   ├── asr_engine.py            # Whisper 语音识别
+│   ├── asr_engine.py            # FunASR / Whisper 语音识别
 │   ├── keyframe_extractor.py    # 关键帧提取 (OpenCV)
 │   ├── summary_engine.py        # LLM 摘要生成
 │   ├── md_generator.py          # Markdown 生成器
@@ -204,7 +204,8 @@ python -m xdu_summarizer.pipeline --course-dir ./下载的课程名
 
 ```txt
 # 核心依赖
-openai-whisper>=20231117    # ASR
+funasr>=1.3.9                   # 默认 ASR
+openai-whisper>=20231117        # Whisper fallback
 opencv-python>=4.8.0        # 关键帧提取
 openai>=1.0.0               # LLM API (可选)
 

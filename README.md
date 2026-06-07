@@ -10,7 +10,7 @@
 |---|---|---|
 | 📥 视频下载 | 调用 XDUClassVideoDownloader 下载课程 | requests + ffmpeg |
 | 🔊 音频提取 | 从 pptVideo 提取 16kHz 单声道音频 | ffmpeg |
-| 🎯 语音识别 | 将教师语音转为带时间戳的逐字稿 | OpenAI Whisper |
+| 🎯 语音识别 | 将教师语音转为带时间戳的逐字稿 | FunASR（默认）/ OpenAI Whisper |
 | 🖼️ 关键帧提取 | 检测幻灯片切换，自动截图 | OpenCV |
 | 🤖 AI 摘要 | LLM 从逐字稿提取核心知识点 | GPT-4o-mini / Claude / Ollama |
 | 📝 笔记输出 | 生成图文并茂的 Markdown 笔记 | 自定义模板 |
@@ -52,6 +52,8 @@ python scripts/run_pipeline.py ./下载的课程/计算机网络 \
     --llm-api-key sk-xxx \
     --llm-base-url https://api.example.com/v1 \
     --llm-model gpt-4o-mini
+
+# 默认使用 FunASR-Nano；也可切回 Whisper：--asr-engine whisper
 ```
 
 #### 方式二：一键下载 + 总结
@@ -62,7 +64,9 @@ python scripts/run_pipeline.py ./下载的课程/计算机网络 \
 
 python scripts/full_workflow.py \
     --live-id 12345678 \
-    --cookies "_d=xxx; UID=xxx; vc3=xxx"
+    --cookies "_d=xxx; UID=xxx; vc3=xxx" \
+    --asr-engine funasr \
+    --funasr-device cuda:0
 ```
 
 #### 方式三：自动发现课程、下载并总结
@@ -77,8 +81,7 @@ python scripts/full_workflow.py --auto --uid 123456789 --video-type ppt
 ```bash
 python scripts/webui.py --host 0.0.0.0 --port 7860
 ```
-
-WebUI 支持填写超星 Cookies/UID、外部 LLM API Key、Endpoint/Base URL 和模型名。
+WebUI 支持填写超星 Cookies/UID、外部 LLM API Key、Endpoint/Base URL、模型名，以及选择 FunASR/Whisper ASR 后端。生成的 Markdown 笔记包含逐字稿、LLM 摘要和课件关键帧图片。
 
 ### 输出示例
 
@@ -137,6 +140,11 @@ beautifulsoup4>=4.13.5
 pycryptodome>=3.23.0
 psutil>=7.0.0
 flask>=3.0.0
+funasr>=1.3.9
+modelscope>=1.37.1
+transformers>=4.51.3,<5.0.0
+soundfile>=0.13.1
+librosa>=0.11.0
 ```
 
 ## 🙏 致谢

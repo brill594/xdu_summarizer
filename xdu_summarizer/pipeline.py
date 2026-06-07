@@ -37,12 +37,23 @@ class LecturePipeline:
     @property
     def asr(self) -> ASREngine:
         if self._asr is None:
-            self._asr = ASREngine(
-                mode="local",
-                model_name=self.settings.whisper_model,
-                device=self.settings.whisper_device,
-                language=self.settings.whisper_language,
-            )
+            if self.settings.asr_engine == "funasr":
+                self._asr = ASREngine(
+                    mode="funasr",
+                    model_name=self.settings.funasr_model,
+                    device=self.settings.funasr_device,
+                    language=self.settings.funasr_language,
+                    vad_model=self.settings.funasr_vad_model,
+                    batch_size_s=self.settings.funasr_batch_size_s,
+                    merge_length_s=self.settings.funasr_merge_length_s,
+                )
+            else:
+                self._asr = ASREngine(
+                    mode=self.settings.asr_engine,
+                    model_name=self.settings.whisper_model,
+                    device=self.settings.whisper_device,
+                    language=self.settings.whisper_language,
+                )
         return self._asr
 
     @property
@@ -182,17 +193,6 @@ class LecturePipeline:
             asr_data=asr_result,
         )
 
-        # 复制关键帧图片到笔记目录
-        if keyframes:
-            images_dir = output_dir / f"images/{chapter_name}"
-            images_dir.mkdir(parents=True, exist_ok=True)
-            for kf in keyframes:
-                src = Path(kf["path"])
-                if src.exists():
-                    dst = images_dir / src.name
-                    if not dst.exists():
-                        import shutil
-                        shutil.copy2(str(src), str(dst))
 
         logger.info(f"笔记生成完成: {note_path}")
         return note_path

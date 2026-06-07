@@ -5,6 +5,7 @@ Markdown 图文笔记生成器
 import logging
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import List, Optional
 
@@ -53,6 +54,14 @@ class MarkdownGenerator:
         # 计算图片相对路径
         images_rel_dir = f"images/{safe_chapter}"
         images_abs_dir = md_path.parent / images_rel_dir
+        if keyframes:
+            images_abs_dir.mkdir(parents=True, exist_ok=True)
+            for kf in keyframes:
+                src = Path(kf["path"])
+                if src.exists():
+                    dst = images_abs_dir / src.name
+                    if not dst.exists():
+                        shutil.copy2(str(src), str(dst))
 
         content = self._build_markdown(
             course_name=course_name,

@@ -131,6 +131,10 @@ def main():
     parser.add_argument("--video-type", choices=["both", "ppt", "teacher"], default="ppt",
                         help="下载的视频类型（默认 ppt，仅做 ASR）")
     parser.add_argument("--output", default="./lecture_notes", help="笔记输出目录（默认 ./lecture_notes）")
+    parser.add_argument("--asr-engine", choices=["funasr", "whisper", "whisper-api"], default="funasr",
+                        help="ASR 引擎（默认 funasr，中文课堂优先）")
+    parser.add_argument("--funasr-model", default="FunAudioLLM/Fun-ASR-Nano-2512", help="FunASR 模型名")
+    parser.add_argument("--funasr-device", default="auto", help="FunASR 推理设备 auto/cpu/cuda:0")
     parser.add_argument("--whisper-model", default="base",
                         help="Whisper 模型: tiny/base/small/medium/large（默认 base）")
     parser.add_argument("--llm-model", default="gpt-4o-mini", help="摘要 LLM 模型")
@@ -140,6 +144,9 @@ def main():
     args = parser.parse_args()
 
     # 设置环境变量
+    os.environ["ASR_ENGINE"] = args.asr_engine
+    os.environ["FUNASR_MODEL"] = args.funasr_model
+    os.environ["FUNASR_DEVICE"] = args.funasr_device
     if args.whisper_model:
         os.environ["WHISPER_MODEL"] = args.whisper_model
     if args.llm_model:

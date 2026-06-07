@@ -11,8 +11,16 @@ def main() -> None:
     parser.add_argument("course_dir", help="课程目录路径（包含 pptVideo/ 或 teacherTrack/ 视频）")
     parser.add_argument("--course-name", help="课程名称（默认使用目录名）")
     parser.add_argument("--output", default="./lecture_notes", help="笔记输出目录")
+    parser.add_argument(
+        "--asr-engine",
+        choices=["funasr", "whisper", "whisper-api"],
+        default="funasr",
+        help="ASR 引擎（默认 funasr，中文课堂优先）",
+    )
+    parser.add_argument("--funasr-model", default="FunAudioLLM/Fun-ASR-Nano-2512", help="FunASR 模型名")
+    parser.add_argument("--funasr-device", default="auto", help="FunASR 推理设备 auto/cpu/cuda:0")
     parser.add_argument("--whisper-model", default="base", help="Whisper 模型大小")
-    parser.add_argument("--device", default="cpu", help="推理设备 cpu/cuda")
+    parser.add_argument("--device", default="cpu", help="Whisper 推理设备 cpu/cuda")
     parser.add_argument("--llm-model", default="gpt-4o-mini", help="摘要 LLM 模型")
     parser.add_argument("--llm-api-key", help="外部 OpenAI-compatible API Key")
     parser.add_argument("--llm-base-url", help="外部 OpenAI-compatible Endpoint/Base URL")
@@ -24,6 +32,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    os.environ["ASR_ENGINE"] = args.asr_engine
+    os.environ["FUNASR_MODEL"] = args.funasr_model
+    os.environ["FUNASR_DEVICE"] = args.funasr_device
     os.environ["WHISPER_MODEL"] = args.whisper_model
     os.environ["WHISPER_DEVICE"] = args.device
     os.environ["LLM_MODEL"] = args.llm_model

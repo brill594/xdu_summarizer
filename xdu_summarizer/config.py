@@ -2,14 +2,22 @@
 配置管理模块
 """
 import os
-from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
 @dataclass
 class Settings:
-    # === Whisper ASR 配置 ===
+    # === ASR 配置 ===
+    asr_engine: str = "funasr"                         # funasr / whisper / whisper-api
+    funasr_model: str = "FunAudioLLM/Fun-ASR-Nano-2512"
+    funasr_device: str = "auto"                        # auto / cpu / cuda:0
+    funasr_language: str = "auto"
+    funasr_vad_model: Optional[str] = "fsmn-vad"
+    funasr_batch_size_s: int = 60
+    funasr_merge_length_s: int = 15
+
+    # === Whisper ASR 配置（保留 fallback） ===
     whisper_model: str = "base"          # tiny/base/small/medium/large
     whisper_device: str = "cpu"          # cpu / cuda
     whisper_language: str = "zh"         # 语言代码，None 自动检测
@@ -26,7 +34,7 @@ class Settings:
     keyframe_resize_width: int = 1280    # 截图输出宽度
 
     # === 音频处理 ===
-    audio_sample_rate: int = 16000       # Whisper 采样率
+    audio_sample_rate: int = 16000       # ASR 采样率
     audio_channels: int = 1              # 单声道
 
     # === 输出 ===
@@ -47,8 +55,16 @@ class Settings:
     def from_env(cls) -> "Settings":
         """从环境变量加载配置"""
         return cls(
+            asr_engine=os.getenv("ASR_ENGINE", "funasr"),
+            funasr_model=os.getenv("FUNASR_MODEL", "FunAudioLLM/Fun-ASR-Nano-2512"),
+            funasr_device=os.getenv("FUNASR_DEVICE", os.getenv("ASR_DEVICE", "auto")),
+            funasr_language=os.getenv("FUNASR_LANGUAGE", "auto"),
+            funasr_vad_model=os.getenv("FUNASR_VAD_MODEL", "fsmn-vad") or None,
+            funasr_batch_size_s=int(os.getenv("FUNASR_BATCH_SIZE_S", "60")),
+            funasr_merge_length_s=int(os.getenv("FUNASR_MERGE_LENGTH_S", "15")),
             whisper_model=os.getenv("WHISPER_MODEL", "base"),
-            whisper_device=os.getenv("WHISPER_DEVICE", "cpu"),
+            whisper_device=os.getenv("WHISPER_DEVICE", os.getenv("ASR_DEVICE", "cpu")),
+            whisper_language=os.getenv("WHISPER_LANGUAGE", "zh"),
             llm_api_key=os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"),
             llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
             llm_base_url=os.getenv("LLM_BASE_URL"),
@@ -62,7 +78,7 @@ class Settings:
 
     @classmethod
     def load(cls, path: str) -> "Settings":
-        """从文件加载配置"""
+        """从文件加载"""
         import json
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)

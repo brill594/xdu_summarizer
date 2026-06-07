@@ -92,7 +92,21 @@ def extract_keyframes(
         hist = cv2.calcHist([hsv], [0, 1], None, [50, 60], [0, 180, 0, 256])
         cv2.normalize(hist, hist, 0, 1, cv2.NORM_MINMAX)
 
-        if prev_hist is not None:
+        if prev_hist is None:
+            out_path = _save_frame(
+                frame, output_dir, safe_name, current_time,
+                saved_count, resize_width,
+            )
+            keyframes.append({
+                "time": round(current_time, 2),
+                "path": out_path,
+                "frame_index": frame_idx,
+                "diff_score": 0.0,
+            })
+            saved_count += 1
+            last_keyframe_time = current_time
+            logger.debug(f"  首帧 @ {current_time:.1f}s")
+        else:
             # 用相关性比较检测场景切换
             diff = cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CHISQR)
             time_since_last = current_time - last_keyframe_time
@@ -113,7 +127,6 @@ def extract_keyframes(
                 saved_count += 1
                 last_keyframe_time = current_time
                 logger.debug(f"  场景切换 @ {current_time:.1f}s (diff={diff:.1f})")
-
         prev_hist = hist
         frame_idx += 1
 

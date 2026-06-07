@@ -100,8 +100,35 @@ _INDEX_TEMPLATE = """
     <textarea name="cookies" placeholder="_d=...; UID=...; vc3=..."></textarea>
     <div class="hint">仅用于本次下载器认证配置；不写入笔记输出。省略时使用下载器已保存认证或交互认证。</div>
 
-    <h2>摘要模型</h2>
+    <h2>ASR 与摘要模型</h2>
     <div class="grid">
+      <div>
+        <label>ASR 引擎</label>
+        <select name="asr_engine">
+          <option value="funasr" selected>FunASR（推荐中文课堂）</option>
+          <option value="whisper">本地 Whisper</option>
+          <option value="whisper-api">Whisper API</option>
+        </select>
+      </div>
+      <div>
+        <label>FunASR 模型</label>
+        <input name="funasr_model" value="FunAudioLLM/Fun-ASR-Nano-2512">
+      </div>
+      <div>
+        <label>FunASR 设备</label>
+        <input name="funasr_device" value="auto" placeholder="auto / cpu / cuda:0">
+      </div>
+      <div>
+        <label>Whisper 模型（fallback）</label>
+        <input name="whisper_model" value="base">
+      </div>
+      <div>
+        <label>Whisper 设备</label>
+        <select name="whisper_device">
+          <option value="cpu">cpu</option>
+          <option value="cuda">cuda</option>
+        </select>
+      </div>
       <div>
         <label>API Key</label>
         <input name="llm_api_key" type="password" autocomplete="off" placeholder="外部 OpenAI-compatible API Key">
@@ -113,17 +140,6 @@ _INDEX_TEMPLATE = """
       <div>
         <label>模型</label>
         <input name="llm_model" value="gpt-4o-mini">
-      </div>
-      <div>
-        <label>Whisper 模型</label>
-        <input name="whisper_model" value="base">
-      </div>
-      <div>
-        <label>ASR 设备</label>
-        <select name="whisper_device">
-          <option value="cpu">cpu</option>
-          <option value="cuda">cuda</option>
-        </select>
       </div>
       <div>
         <label>笔记输出目录</label>
@@ -291,6 +307,9 @@ def _run_job(job_id: str, form: dict[str, str]) -> None:
             raise ValueError(f"未知运行模式: {mode}")
 
         settings = Settings.from_env()
+        settings.asr_engine = form.get("asr_engine") or settings.asr_engine
+        settings.funasr_model = form.get("funasr_model") or settings.funasr_model
+        settings.funasr_device = form.get("funasr_device") or settings.funasr_device
         settings.llm_api_key = form.get("llm_api_key") or settings.llm_api_key
         settings.llm_base_url = form.get("llm_base_url") or settings.llm_base_url
         settings.llm_model = form.get("llm_model") or settings.llm_model

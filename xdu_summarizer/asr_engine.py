@@ -33,6 +33,7 @@ class ASREngine:
         api_key: Optional[str] = None,
         api_base: Optional[str] = None,
         vad_model: Optional[str] = "fsmn-vad",
+        punc_model: Optional[str] = "ct-punc",
         batch_size_s: int = 60,
         merge_length_s: int = 15,
     ):
@@ -41,6 +42,7 @@ class ASREngine:
         self.device = self._resolve_device(device)
         self.language = language
         self.vad_model = vad_model
+        self.punc_model = punc_model
         self.batch_size_s = batch_size_s
         self.merge_length_s = merge_length_s
         self._model = None
@@ -93,6 +95,8 @@ class ASREngine:
             if self.vad_model:
                 kwargs["vad_model"] = self.vad_model
                 kwargs["vad_kwargs"] = {"max_single_segment_time": 30000}
+            if self.punc_model:
+                kwargs["punc_model"] = self.punc_model
             self._model = AutoModel(**kwargs)
             logger.info("FunASR 模型加载完毕")
             return

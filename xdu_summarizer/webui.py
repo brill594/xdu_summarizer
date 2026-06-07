@@ -105,28 +105,33 @@ _INDEX_TEMPLATE = """
       <div>
         <label>ASR 引擎</label>
         <select name="asr_engine">
-          <option value="funasr" selected>FunASR（推荐中文课堂）</option>
-          <option value="whisper">本地 Whisper</option>
-          <option value="whisper-api">Whisper API</option>
+          <option value="funasr" {% if settings.asr_engine == "funasr" %}selected{% endif %}>FunASR（推荐中文课堂）</option>
+          <option value="whisper" {% if settings.asr_engine == "whisper" %}selected{% endif %}>本地 Whisper</option>
+          <option value="whisper-api" {% if settings.asr_engine == "whisper-api" %}selected{% endif %}>Whisper API</option>
         </select>
       </div>
       <div>
         <label>FunASR 模型</label>
-        <input name="funasr_model" value="FunAudioLLM/Fun-ASR-Nano-2512">
+        <input name="funasr_model" value="{{ settings.funasr_model }}">
       </div>
       <div>
         <label>FunASR 设备</label>
-        <input name="funasr_device" value="auto" placeholder="auto / cpu / cuda:0">
+        <input name="funasr_device" value="{{ settings.funasr_device }}" placeholder="auto / cpu / cuda:0">
+      </div>
+      <div>
+        <label>FunASR 标点模型</label>
+        <input name="funasr_punc_model" value="{{ settings.funasr_punc_model or '' }}" placeholder="ct-punc；留空禁用">
       </div>
       <div>
         <label>Whisper 模型（fallback）</label>
-        <input name="whisper_model" value="base">
+        <input name="whisper_model" value="{{ settings.whisper_model }}">
       </div>
       <div>
         <label>Whisper 设备</label>
         <select name="whisper_device">
-          <option value="cpu">cpu</option>
-          <option value="cuda">cuda</option>
+          <option value="cpu" {% if settings.whisper_device == "cpu" %}selected{% endif %}>cpu</option>
+          <option value="cuda" {% if settings.whisper_device == "cuda" %}selected{% endif %}>cuda</option>
+          <option value="cuda:0" {% if settings.whisper_device == "cuda:0" %}selected{% endif %}>cuda:0</option>
         </select>
       </div>
       <div>
@@ -135,15 +140,15 @@ _INDEX_TEMPLATE = """
       </div>
       <div>
         <label>Endpoint / Base URL</label>
-        <input name="llm_base_url" placeholder="https://api.example.com/v1">
+        <input name="llm_base_url" value="{{ settings.llm_base_url or '' }}" placeholder="https://api.example.com/v1">
       </div>
       <div>
         <label>模型</label>
-        <input name="llm_model" value="gpt-4o-mini">
+        <input name="llm_model" value="{{ settings.llm_model }}">
       </div>
       <div>
         <label>笔记输出目录</label>
-        <input name="notes_output_dir" value="./lecture_notes">
+        <input name="notes_output_dir" value="{{ settings.output_dir }}">
       </div>
       <div>
         <label>下载输出目录</label>
@@ -310,6 +315,7 @@ def _run_job(job_id: str, form: dict[str, str]) -> None:
         settings.asr_engine = form.get("asr_engine") or settings.asr_engine
         settings.funasr_model = form.get("funasr_model") or settings.funasr_model
         settings.funasr_device = form.get("funasr_device") or settings.funasr_device
+        settings.funasr_punc_model = form.get("funasr_punc_model") or None
         settings.llm_api_key = form.get("llm_api_key") or settings.llm_api_key
         settings.llm_base_url = form.get("llm_base_url") or settings.llm_base_url
         settings.llm_model = form.get("llm_model") or settings.llm_model
@@ -340,7 +346,7 @@ def create_app() -> Flask:
     def index():
         with _JOBS_LOCK:
             jobs = [dict(id=job_id, **job) for job_id, job in reversed(list(_JOBS.items()))]
-        return render_template_string(_INDEX_TEMPLATE, jobs=jobs)
+        return render_template_string(_INDEX_TEMPLATE, jobs=jobs, settings=Settings.from_env())
 
     @app.post("/jobs")
     def start_job():

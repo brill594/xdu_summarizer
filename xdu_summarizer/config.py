@@ -5,6 +5,21 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
+_DOTENV_LOADED = False
+
+
+def load_env_file() -> None:
+    """Load a local .env file once, without overriding real environment vars."""
+    global _DOTENV_LOADED
+    if _DOTENV_LOADED:
+        return
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(override=False)
+    except ImportError:
+        pass
+    _DOTENV_LOADED = True
+
 
 @dataclass
 class Settings:
@@ -14,6 +29,7 @@ class Settings:
     funasr_device: str = "auto"                        # auto / cpu / cuda:0
     funasr_language: str = "auto"
     funasr_vad_model: Optional[str] = "fsmn-vad"
+    funasr_punc_model: Optional[str] = "ct-punc"
     funasr_batch_size_s: int = 60
     funasr_merge_length_s: int = 15
 
@@ -54,12 +70,14 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         """从环境变量加载配置"""
+        load_env_file()
         return cls(
             asr_engine=os.getenv("ASR_ENGINE", "funasr"),
             funasr_model=os.getenv("FUNASR_MODEL", "FunAudioLLM/Fun-ASR-Nano-2512"),
             funasr_device=os.getenv("FUNASR_DEVICE", os.getenv("ASR_DEVICE", "auto")),
             funasr_language=os.getenv("FUNASR_LANGUAGE", "auto"),
             funasr_vad_model=os.getenv("FUNASR_VAD_MODEL", "fsmn-vad") or None,
+            funasr_punc_model=os.getenv("FUNASR_PUNC_MODEL", "ct-punc") or None,
             funasr_batch_size_s=int(os.getenv("FUNASR_BATCH_SIZE_S", "60")),
             funasr_merge_length_s=int(os.getenv("FUNASR_MERGE_LENGTH_S", "15")),
             whisper_model=os.getenv("WHISPER_MODEL", "base"),
@@ -68,6 +86,7 @@ class Settings:
             llm_api_key=os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"),
             llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
             llm_base_url=os.getenv("LLM_BASE_URL"),
+            output_dir=os.getenv("OUTPUT_DIR", "./lecture_notes"),
         )
 
     def save(self, path: str):

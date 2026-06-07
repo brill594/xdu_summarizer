@@ -27,7 +27,7 @@ class ASREngine:
     def __init__(
         self,
         mode: str = "funasr",
-        model_name: str = "FunAudioLLM/Fun-ASR-Nano-2512",
+        model_name: str = "paraformer-zh",
         device: str = "auto",
         language: Optional[str] = "auto",
         api_key: Optional[str] = None,
@@ -45,6 +45,7 @@ class ASREngine:
         self.punc_model = punc_model
         self.batch_size_s = batch_size_s
         self.merge_length_s = merge_length_s
+        self.vad_max_segment_time_ms = int(os.getenv("FUNASR_VAD_MAX_SEGMENT_TIME_MS", "30000"))
         self._model = None
 
         if self.mode == "whisper-api":
@@ -94,7 +95,7 @@ class ASREngine:
             }
             if self.vad_model:
                 kwargs["vad_model"] = self.vad_model
-                kwargs["vad_kwargs"] = {"max_single_segment_time": 30000}
+                kwargs["vad_kwargs"] = {"max_single_segment_time": self.vad_max_segment_time_ms}
             if self.punc_model:
                 kwargs["punc_model"] = self.punc_model
             self._model = AutoModel(**kwargs)
@@ -132,7 +133,8 @@ class ASREngine:
             cached_model = cached.get("model")
             engine_matches = cached_engine == self.mode or (self.mode == "whisper" and not cached_engine)
             model_matches = not cached_model or cached_model == self.model_name or self.mode == "whisper-api"
-            if engine_matches and model_matches:
+            config_matches = self._cache_config_matches(cached)
+            if engine_matches and model_matches and config_matches:
                 logger.info(f"从缓存读取 ASR 结果: {cache_path}")
                 return cached
             logger.info(
@@ -163,15 +165,20 @@ class ASREngine:
         self._load_model()
         start = time.time()
 
-        raw = self._model.generate(
-            input=str(audio_path),
-            cache={},
-            language=self.language or "auto",
-            use_itn=True,
-            batch_size_s=self.batch_size_s,
-            merge_vad=bool(self.vad_model),
-            merge_length_s=self.merge_length_s,
-        )
+        try:
+            raw = self._generate_funasr(audio_path)
+        except NotImplementedError as exc:
+            if not self.punc_model or "batch decoding" not in str(exc):
+                raise
+            logger.warning(
+                "FunASR 标点模型 %s 不支持当前批量解码路径，禁用标点模型后重试: %s",
+                self.punc_model,
+                exc,
+            )
+            self.punc_model = None
+            self._model = None
+            self._load_model()
+            raw = self._generate_funasr(audio_path)
 
         elapsed = time.time() - start
         duration = self._audio_duration_seconds(audio_path)
@@ -181,6 +188,11 @@ class ASREngine:
             "model": self.model_name,
             "device": self.device,
             "language": self.language or "auto",
+            "vad_model": self.vad_model,
+            "punc_model": self.punc_model,
+            "batch_size_s": self.batch_size_s,
+            "merge_length_s": self.merge_length_s,
+            "vad_max_segment_time_ms": self.vad_max_segment_time_ms,
             "raw": raw,
         })
         logger.info(
@@ -189,6 +201,33 @@ class ASREngine:
             f"实时率={elapsed/max(duration,1):.2f}x"
         )
         return result
+
+    def _generate_funasr(self, audio_path: str):
+        return self._model.generate(
+            input=str(audio_path),
+            cache={},
+            language=self.language or "auto",
+            use_itn=True,
+            batch_size_s=self.batch_size_s,
+            merge_vad=bool(self.vad_model),
+            merge_length_s=self.merge_length_s,
+        )
+
+    def _cache_config_matches(self, cached: dict) -> bool:
+        """Return whether cached ASR output matches config that affects text."""
+        if self.mode != "funasr":
+            return True
+
+        expected = {
+            "device": self.device,
+            "language": self.language or "auto",
+            "vad_model": self.vad_model,
+            "punc_model": self.punc_model,
+            "batch_size_s": self.batch_size_s,
+            "merge_length_s": self.merge_length_s,
+            "vad_max_segment_time_ms": self.vad_max_segment_time_ms,
+        }
+        return all(cached.get(key) == value for key, value in expected.items())
 
     def _transcribe_whisper(self, audio_path: str) -> dict:
         """本地 Whisper 转录。"""

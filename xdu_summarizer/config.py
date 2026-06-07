@@ -25,7 +25,7 @@ def load_env_file() -> None:
 class Settings:
     # === ASR 配置 ===
     asr_engine: str = "funasr"                         # funasr / whisper / whisper-api
-    funasr_model: str = "FunAudioLLM/Fun-ASR-Nano-2512"
+    funasr_model: str = "paraformer-zh"
     funasr_device: str = "auto"                        # auto / cpu / cuda:0
     funasr_language: str = "auto"
     funasr_vad_model: Optional[str] = "fsmn-vad"
@@ -73,7 +73,7 @@ class Settings:
         load_env_file()
         return cls(
             asr_engine=os.getenv("ASR_ENGINE", "funasr"),
-            funasr_model=os.getenv("FUNASR_MODEL", "FunAudioLLM/Fun-ASR-Nano-2512"),
+            funasr_model=os.getenv("FUNASR_MODEL", "paraformer-zh"),
             funasr_device=os.getenv("FUNASR_DEVICE", os.getenv("ASR_DEVICE", "auto")),
             funasr_language=os.getenv("FUNASR_LANGUAGE", "auto"),
             funasr_vad_model=os.getenv("FUNASR_VAD_MODEL", "fsmn-vad") or None,

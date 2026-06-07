@@ -104,7 +104,7 @@ WebUI 支持填写超星 Cookies/UID、外部 LLM API Key、Endpoint/Base URL、
 
 ```bash
 export ASR_ENGINE=funasr
-export FUNASR_MODEL=FunAudioLLM/Fun-ASR-Nano-2512
+export FUNASR_MODEL=paraformer-zh
 export FUNASR_DEVICE=auto          # auto / cpu / cuda:0
 export FUNASR_PUNC_MODEL=ct-punc   # 留空可禁用标点模型
 export WHISPER_MODEL=small        # tiny/base/small/medium/large

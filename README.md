@@ -100,9 +100,13 @@ WebUI 支持填写超星 Cookies/UID、外部 LLM API Key、Endpoint/Base URL、
 
 ## ⚙️ 配置
 
-通过环境变量配置：
+通过环境变量或仓库根目录的 `.env` 文件配置（可从 `.env.example` 复制）：
 
 ```bash
+export ASR_ENGINE=funasr
+export FUNASR_MODEL=paraformer-zh
+export FUNASR_DEVICE=auto          # auto / cpu / cuda:0
+export FUNASR_PUNC_MODEL=ct-punc   # 留空可禁用标点模型
 export WHISPER_MODEL=small        # tiny/base/small/medium/large
 export WHISPER_DEVICE=cpu         # cpu 或 cuda
 export LLM_API_KEY=sk-xxx         # OpenAI API Key
@@ -145,6 +149,7 @@ modelscope>=1.37.1
 transformers>=4.51.3,<5.0.0
 soundfile>=0.13.1
 librosa>=0.11.0
+python-dotenv>=1.0.0
 ```
 
 ## 🙏 致谢

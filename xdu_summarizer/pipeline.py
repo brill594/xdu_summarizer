@@ -44,6 +44,7 @@ class LecturePipeline:
                     device=self.settings.funasr_device,
                     language=self.settings.funasr_language,
                     vad_model=self.settings.funasr_vad_model,
+                    punc_model=self.settings.funasr_punc_model,
                     batch_size_s=self.settings.funasr_batch_size_s,
                     merge_length_s=self.settings.funasr_merge_length_s,
                 )

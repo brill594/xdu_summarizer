@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 venv/
 .cache/
+.env
 .xdu_downloader/
 xdu_downloads/
 lecture_notes/

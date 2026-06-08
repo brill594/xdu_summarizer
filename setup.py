@@ -23,6 +23,7 @@ setup(
         "transformers>=4.51.3,<5.0.0",
         "soundfile>=0.13.1",
         "librosa>=0.11.0",
+        "python-dotenv>=1.0.0",
     ],
     entry_points={
         "console_scripts": [

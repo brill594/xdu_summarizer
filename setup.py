@@ -5,6 +5,17 @@ setup(
     version="1.0.0",
     description="XDU 网课自动下载 + 智能总结系统 — 图文并茂的课程笔记",
     packages=find_packages(),
+    package_data={
+        "xdu_summarizer.ids_helper": [
+            "go.mod",
+            "go.sum",
+            "LICENSE",
+            "THIRD_PARTY_NOTICES.md",
+            "cmd/xdu-ids-auth/*.go",
+            "internal/idsauth/*.go",
+            "internal/idsauth/README.md",
+        ],
+    },
     python_requires=">=3.8",
     install_requires=[
         "openai-whisper>=20231117",

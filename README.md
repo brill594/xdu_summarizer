@@ -9,8 +9,9 @@
 | 步骤 | 说明 | 技术 |
 |---|---|---|
 | 📥 视频下载 | 调用 XDUClassVideoDownloader 下载课程 | requests + ffmpeg |
-| 🔊 音频提取 | 从 pptVideo 提取 16kHz 单声道音频 | ffmpeg |
-| 🎯 语音识别 | 将教师语音转为带时间戳的逐字稿 | FunASR（默认）/ OpenAI Whisper |
+| 📜 字幕读取 | 优先读取下载器生成的同名 SRT/VTT 字幕 | 内置解析器 |
+| 🔊 音频提取 | 仅在没有可用字幕时提取音频 | ffmpeg |
+| 🎯 语音识别 | 无字幕时生成带时间戳的逐字稿 | FunASR（默认回退）/ OpenAI Whisper |
 | 🖼️ 关键帧提取 | 检测幻灯片切换，自动截图 | OpenCV |
 | 🤖 AI 摘要 | LLM 从逐字稿提取核心知识点 | GPT-4o-mini / Claude / Ollama |
 | 📝 笔记输出 | 生成图文并茂的 Markdown 笔记 | 自定义模板 |
@@ -53,7 +54,7 @@ python scripts/run_pipeline.py ./下载的课程/计算机网络 \
     --llm-base-url https://api.example.com/v1 \
     --llm-model gpt-4o-mini
 
-# 默认使用 FunASR-Nano；也可切回 Whisper：--asr-engine whisper
+# 有同名字幕时自动跳过 ASR；无字幕时默认使用 FunASR，也可切换 Whisper
 ```
 
 #### 方式二：一键下载 + 总结
@@ -69,6 +70,20 @@ python scripts/full_workflow.py \
     --funasr-device cuda:0
 ```
 
+也可以通过新版 IDS helper 登录。密码不会放入命令行参数；如触发二次认证，
+脚本会在同一认证会话中提示输入短信、企业微信或邮箱验证码：
+
+```bash
+python scripts/full_workflow.py \
+    --live-id 12345678 \
+    --ids-username 你的学号 \
+    --ids-reauth-channel email
+```
+
+首次使用会通过 Go 1.25.9+ 构建内置 helper。也可用
+`XDU_IDS_AUTH_HELPER` 指向预编译程序；自动化环境可通过
+`XDU_IDS_USERNAME` 和 `XDU_IDS_PASSWORD` 提供账号信息。
+
 #### 方式三：自动发现课程、下载并总结
 
 ```bash
@@ -81,7 +96,7 @@ python scripts/full_workflow.py --auto --uid 123456789 --video-type ppt
 ```bash
 python scripts/webui.py --host 0.0.0.0 --port 7860
 ```
-WebUI 支持填写超星 Cookies/UID、外部 LLM API Key、Endpoint/Base URL、模型名，以及选择 FunASR/Whisper ASR 后端。生成的 Markdown 笔记包含逐字稿、LLM 摘要和课件关键帧图片。
+WebUI 支持填写超星 Cookies/UID、外部 LLM API Key、Endpoint/Base URL、模型名，以及选择无字幕时使用的 FunASR/Whisper 后端。生成的 Markdown 笔记包含逐字稿、LLM 摘要和课件关键帧图片。
 
 ### 输出示例
 

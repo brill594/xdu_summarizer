@@ -15,6 +15,7 @@ from .asr_engine import ASREngine
 from .keyframe_extractor import extract_keyframes, get_keyframe_cache_dir
 from .summary_engine import SummaryEngine
 from .md_generator import MarkdownGenerator
+from .xdu_downloader import load_downloaded_subtitle
 
 logger = logging.getLogger(__name__)
 
@@ -137,27 +138,29 @@ class LecturePipeline:
 
         logger.info(f"处理视频: {video_path}")
 
-        # === Step 1: 提取音频 ===
+        # === Step 1: 优先使用下载器字幕 ===
         cache_dir = str(Path(course_name) / ".cache")
         audio_path = get_audio_cache_path(video_path, cache_dir)
         asr_cache = audio_path.replace(".wav", "_asr.json")
+        asr_result = load_downloaded_subtitle(video_path)
 
-        if not Path(audio_path).exists():
+        # === Step 2: 无可用字幕时才提取音频并运行 ASR ===
+        if asr_result is None:
+            if not Path(audio_path).exists():
+                try:
+                    extract_audio(video_path, audio_path, self.settings.audio_sample_rate)
+                except Exception as e:
+                    logger.error(f"音频提取失败: {video_path} — {e}")
+                    return None
+
             try:
-                extract_audio(video_path, audio_path, self.settings.audio_sample_rate)
+                asr_result = self.asr.transcribe(audio_path, cache_path=asr_cache)
             except Exception as e:
-                logger.error(f"音频提取失败: {video_path} — {e}")
+                logger.error(f"ASR 识别失败: {video_path} — {e}")
                 return None
 
-        # === Step 2: ASR 语音识别 ===
-        try:
-            asr_result = self.asr.transcribe(audio_path, cache_path=asr_cache)
-        except Exception as e:
-            logger.error(f"ASR 识别失败: {video_path} — {e}")
-            return None
-
         if not asr_result.get("segments"):
-            logger.warning(f"ASR 结果为空: {video_path}")
+            logger.warning(f"逐字稿结果为空: {video_path}")
             return None
 
         # === Step 3: 提取关键帧 ===

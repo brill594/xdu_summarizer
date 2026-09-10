@@ -17,10 +17,10 @@
 
 | 层 | 组件 | 输入 | 输出 |
 |---|---|---|---|
-| **① 视频下载** | `XDUClassVideoDownloader`（运行时自动拉取） | liveId / UID + cookies 或下载器认证向导 | .mp4 视频文件 (pptVideo + teacherTrack) |
-| **② 预处理** | `AudioExtractor` | .mp4 视频 | .wav 音频 (16kHz mono) |
+| **① 视频下载** | `XDUClassVideoDownloader`（运行时自动拉取） | liveId / UID + cookies 或 IDS helper | .mp4 视频及可用的 .srt 字幕 |
+| **② 预处理** | `AudioExtractor` | 无有效字幕的 .mp4 视频 | .wav 音频 (16kHz mono) |
 |  | `KeyFrameExtractor` | .mp4 (pptVideo) | 关键帧截图 (slide transitions) |
-| **③ AI 分析** | `ASREngine` (FunASR / Whisper) | .wav 音频 | 带时间戳的逐字稿 (JSON) |
+| **③ 逐字稿** | 下载器字幕优先，`ASREngine` (FunASR / Whisper) 回退 | .srt/.vtt 字幕或 .wav 音频 | 带时间戳的逐字稿 (JSON) |
 |  | `SummaryEngine` (LLM) | 逐字稿 | 结构化重点摘要 |
 | **④ 输出** | `MarkdownGenerator` | 摘要 + 截图 | **图文并茂的 .md 笔记** |
 
@@ -33,38 +33,21 @@
                     │   XDUClassVideoDownloader │
                     │   (Automation.py)     │
                     └──────────┬───────────┘
-                               │ .mp4
+                               │ .mp4 + 可选 .srt
                                ▼
-                    ┌──────────────────────┐
-                    │  课程视频目录结构       │
-                    │                      │
-                    │  CourseName/          │
-                    │   ├── Week1/          │
-                    │   │   ├── pptVideo/   │
-                    │   │   │   └── *.mp4   │
-                    │   │   └── teacherTrack/│
-                    │   │       └── *.mp4   │
-                    │   └── Week2/          │
-                    └──────────────────────┘
-                               │
-                               ▼
-                  ┌─────────────────────────┐
-                  │    预处理流水线           │
-                  │                         │
-                  │  pptVideo ──→ 关键帧提取  │
-                  │  teacherTrack ─→ 音频提取  │
-                  └──────────┬──────────────┘
-                             │
-                   ┌─────────┴──────────┐
-                   ▼                    ▼
-            ┌──────────────┐   ┌────────────────┐
-            │ FunASR /     │   │  关键帧截图      │
-            │ Whisper ASR  │   │ (slide_01.jpg)   │
-            └──────┬───────┘   └───────┬────────┘
-                   │                   │
-                   ▼                   │
-            ┌──────────────┐           │
-            │ LLM 摘要引擎   │◄──────────┘
+                   ┌───────────┴───────────┐
+                   ▼                       ▼
+          ┌────────────────┐      ┌────────────────┐
+          │ 同名字幕可用？   │      │  关键帧提取      │
+          └───────┬────────┘      │ (slide_01.jpg) │
+             是   │   否          └───────┬────────┘
+          ┌───────▼───┐ ┌──────────────┐  │
+          │ 字幕解析器  │ │ 音频 → ASR   │  │
+          └───────┬───┘ └──────┬───────┘  │
+                  └──────┬─────┘          │
+                         ▼                │
+            ┌──────────────┐              │
+            │ LLM 摘要引擎   │◄─────────────┘
             │ (OpenAI/     │
             │  Claude/本地) │
             └──────┬───────┘
@@ -89,11 +72,11 @@
 
 | 方案 | 优点 | 缺点 | 适用场景 |
 |---|---|---|---|
-| **FunASR** `FunAudioLLM/Fun-ASR-Nano-2512` | 中文课堂、方言/口音覆盖更好，支持本地 GPU | 首次下载模型较大 | 默认方案 |
+| **FunASR** `FunAudioLLM/Fun-ASR-Nano-2512` | 中文课堂、方言/口音覆盖更好，支持本地 GPU | 首次下载模型较大 | 无字幕时的默认回退 |
 | **Whisper (local)** `openai-whisper` | 免费、离线、依赖少 | 中文课堂/方言效果较弱 | fallback |
 | **Whisper API** | 接入简单 | 按量付费、外部服务 | 临时 fallback |
 
-**推荐：FunASR-Nano + GPU/CPU auto** — 当前默认后端，优先保证中文课堂逐字稿质量。
+**推荐：优先使用下载器字幕；无字幕时使用 FunASR-Nano + GPU/CPU auto**。
 
 ### 3.2 LLM 摘要
 
@@ -214,4 +197,3 @@ ffmpeg-python               # 音频提取
 pillow>=10.0.0              # 图片处理
 tqdm                        # 进度条
 ```
-

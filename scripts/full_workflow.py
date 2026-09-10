@@ -16,6 +16,7 @@
    python full_workflow.py --auto --uid 123456789
 """
 import argparse
+import getpass
 import logging
 import os
 import sys
@@ -121,6 +122,13 @@ def main():
 
     parser.add_argument("--live-id", help="课程 liveId（用于下载）")
     parser.add_argument("--cookies", help="超星平台 cookies；省略则使用下载器认证向导或已保存认证")
+    parser.add_argument("--ids-username", help="西电统一身份认证账号；密码从安全提示或 XDU_IDS_PASSWORD 读取")
+    parser.add_argument(
+        "--ids-reauth-channel",
+        choices=["sms", "wechat", "email"],
+        default="sms",
+        help="IDS 二次认证通道（默认 sms）",
+    )
     parser.add_argument("--course-dir", help="已下载的课程目录（直接总结，跳过下载）")
     parser.add_argument("--auto", action="store_true", help="自动模式：使用 Automation.py 发现课程并下载")
     parser.add_argument("--uid", help="超星 UID（自动模式扫描课程用）")
@@ -132,7 +140,7 @@ def main():
     parser.add_argument("--update-downloader", action="store_true", help="重新下载/更新 XDUClassVideoDownloader")
     parser.add_argument("--debug-downloader", action="store_true", help="启用下载器 debug 日志")
     parser.add_argument("--video-type", choices=["both", "ppt", "teacher"], default="ppt",
-                        help="下载的视频类型（默认 ppt，仅做 ASR）")
+                        help="下载的视频类型（默认 ppt，并同时获取可用字幕）")
     parser.add_argument("--output", default=None, help="笔记输出目录")
     parser.add_argument("--asr-engine", choices=["funasr", "whisper", "whisper-api"], default=None,
                         help="ASR 引擎（默认 funasr，中文课堂优先）")
@@ -146,6 +154,18 @@ def main():
     parser.add_argument("--llm-base-url", help="外部 OpenAI-compatible Endpoint/Base URL")
 
     args = parser.parse_args()
+
+    download_requested = bool(args.live_id or args.auto)
+    ids_username = (args.ids_username or os.getenv("XDU_IDS_USERNAME")) if download_requested else None
+    if args.cookies and ids_username:
+        parser.error("--cookies 与 --ids-username 不能同时使用")
+    ids_password = None
+    if ids_username:
+        ids_password = os.getenv("XDU_IDS_PASSWORD") or getpass.getpass("西电统一身份认证密码: ")
+
+    def prompt_reauth_code(sent_to: str) -> str:
+        destination = f"（{sent_to}）" if sent_to else ""
+        return getpass.getpass(f"请输入 IDS 二次认证验证码{destination}: ")
 
     # 设置环境变量
     if args.asr_engine:
@@ -176,6 +196,10 @@ def main():
             live_id=args.live_id,
             output_dir=download_dir,
             cookies=args.cookies,
+            ids_username=ids_username,
+            ids_password=ids_password,
+            ids_reauth_channel=args.ids_reauth_channel,
+            reauth_code_provider=prompt_reauth_code,
             video_type=args.video_type,
             skip_weeks=args.skip_weeks,
             merge=not args.no_merge,
@@ -209,6 +233,10 @@ def main():
             year=args.year,
             term=args.term,
             cookies=args.cookies,
+            ids_username=ids_username,
+            ids_password=ids_password,
+            ids_reauth_channel=args.ids_reauth_channel,
+            reauth_code_provider=prompt_reauth_code,
             video_type=args.video_type,
             downloader_dir=args.downloader_dir,
             update=args.update_downloader,
